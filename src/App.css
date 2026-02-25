@@ -1,0 +1,165 @@
+#root { width: 100vw; height: 100vh; }
+body { margin: 0; padding: 0; overflow: hidden; }
+
+.desk-container {
+  display: flex;
+  justify-content: center;
+  background-color: #F1E9D2;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+.document-spine {
+  width: 700px;
+  height: 100%;
+  padding: 40px;
+  overflow-y: auto;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.pdf-page-card {
+  background: white;
+  padding: 15px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  width: 100%;
+}
+
+.pdf-page-card img { width: 100%; height: auto; display: block; }
+
+/* TLDRAW TRANSPARENCY FIXES */
+.drawing-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.tl-canvas, .tl-background { background-color: transparent !important; }
+.tl-container { pointer-events: all; }
+
+/* THE MASTER UI LAYER FIX */
+.master-ui-layer {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999; /* Forces it above Tldraw's UI */
+  pointer-events: auto; /* Guarantees it can be clicked */
+}
+
+.custom-file-upload {
+  display: inline-block;
+  padding: 40px 80px; 
+  font-size: 32px; 
+  font-weight: bold;
+  background-color: #0064ff;
+  color: white;
+  border-radius: 15px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  text-align: center;
+}
+
+.custom-file-upload:hover {
+  background-color: #004ecc;
+}
+
+.custom-file-upload input {
+  display: none; 
+}
+
+/* THE CORNER "ADD ANOTHER PDF" BUTTON */
+.secondary-ui-layer {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 99999;
+  pointer-events: auto;
+}
+
+.small-file-upload {
+  display: inline-block;
+  padding: 12px 24px; 
+  font-size: 16px; 
+  font-weight: bold;
+  background-color: #28a745; /* Green to separate it from the start button */
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  text-align: center;
+}
+
+.small-file-upload:hover {
+  background-color: #218838;
+}
+
+.small-file-upload input {
+  display: none; 
+}
+
+
+/* CLEAR PAGE BUTTON */
+.clear-btn-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 99999;
+  pointer-events: auto;
+}
+
+.clear-page-btn {
+  padding: 12px 20px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.clear-page-btn:hover {
+  background: #c82333;
+}
+
+/* THE MORE BUTTON */
+.more-toggle-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.more-toggle-btn:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+/* THE EXTRAS POP-UP (Floating perfectly above) */
+.extras-popup {
+  position: absolute;
+  bottom: calc(100% + 15px); /* Forces it exactly 15 pixels above the toolbar */
+  right: 0px;                /* Snaps it to the right edge */
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 8px;
+  z-index: 999999;
+  pointer-events: auto;
+  border: 1px solid rgba(0,0,0,0.05);
+}
