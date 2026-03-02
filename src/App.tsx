@@ -24,7 +24,6 @@ const CustomToolbar = (props: any) => {
   
   return (
     <DefaultToolbar {...props}>
-      {/* MAIN TOOLS (In exact requested order) */}
       <TldrawUiMenuItem {...tools['select']} isSelected={activeToolId === 'select'} />
       <TldrawUiMenuItem {...tools['text']} isSelected={activeToolId === 'text'} />
       <TldrawUiMenuItem {...tools['draw']} isSelected={activeToolId === 'draw'} />
@@ -32,7 +31,6 @@ const CustomToolbar = (props: any) => {
       <TldrawUiMenuItem {...tools['arrow']} isSelected={activeToolId === 'arrow'} />
       <TldrawUiMenuItem {...tools['eraser']} isSelected={activeToolId === 'eraser'} />
       
-      {/* THE TOGGLE BUTTON */}
       <button 
         className="more-toggle-btn" 
         onClick={() => setShowExtras(!showExtras)}
@@ -41,7 +39,6 @@ const CustomToolbar = (props: any) => {
         {showExtras ? '⬇️' : '➕'}
       </button>
 
-      {/* THE EXTRAS DRAWER */}
       {showExtras && (
         <div className="extras-popup" onClick={() => setShowExtras(false)}>
           <TldrawUiMenuItem {...tools['note']} isSelected={activeToolId === 'note'} />
@@ -56,12 +53,11 @@ const CustomToolbar = (props: any) => {
   );
 };
 
-// 2. PACKAGING THE CUSTOM COMPONENTS
 const components: TLComponents = {
   Toolbar: CustomToolbar,
 };
 
-// 3. THE UPLOAD BUTTON MEMORY
+// 2. THE UPLOAD BUTTON
 function BigBlueButton() {
   const editor = useEditor();
   const [isLoading, setIsLoading] = useState(false);
@@ -81,7 +77,8 @@ function BigBlueButton() {
         images.forEach((img, index) => {
           const assetId = AssetRecordType.createId();
           
-          const targetWidth = 800;
+          // THE FIX: Dialed back to 1600 (2x the original size instead of 3x)
+          const targetWidth = 1600; 
           const scaleFactor = targetWidth / img.width;
           const targetHeight = img.height * scaleFactor;
 
@@ -136,14 +133,13 @@ function BigBlueButton() {
   );
 }
 
-// 4. THE MAIN APP
+// 3. THE MAIN APP
 export default function App() {
   return (
     <div className="desk-container">
       <div className="drawing-layer">
         <Tldraw persistenceKey="local-lab" components={components}>
           <BigBlueButton />
-          {/* The Clear button has been completely removed from here! */}
         </Tldraw>
       </div>
     </div>

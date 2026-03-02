@@ -1,3 +1,5 @@
+@import url('https://fonts.cdnfonts.com/css/opendyslexic');
+
 #root { width: 100vw; height: 100vh; }
 body { margin: 0; padding: 0; overflow: hidden; }
 
@@ -162,4 +164,9 @@ body { margin: 0; padding: 0; overflow: hidden; }
   z-index: 999999;
   pointer-events: auto;
   border: 1px solid rgba(0,0,0,0.05);
+}
+
+/* HIJACK THE 4TH FONT OPTION FOR DYSLEXIA FONT */
+.tl-container {
+  --tl-font-mono: 'OpenDyslexic', 'Comic Sans MS', sans-serif !important;
 }
