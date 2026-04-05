@@ -8,6 +8,22 @@ export interface PdfPageImage {
   height: number;
 }
 
+export async function createSmallThumbnail(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 0.4 });
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  if (context) {
+    await page.render({ canvasContext: context, viewport }).promise;
+    return canvas.toDataURL("image/jpeg", 0.75);
+  }
+  return "";
+}
+
 export async function convertPdfToImages(file: File): Promise<PdfPageImage[]> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
