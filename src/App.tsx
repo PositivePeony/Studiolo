@@ -8,7 +8,9 @@ import {
   type TLComponents,
   useTools,
   DefaultToolbar,
-  TldrawUiMenuItem
+  TldrawUiMenuItem,
+  DefaultFontStyle,
+  DefaultSizeStyle,
 } from "tldraw";
 import "tldraw/tldraw.css";
 import "./App.css";
@@ -20,6 +22,8 @@ interface StoredPdfMeta {
   id: string;
   name: string;
   thumbnail: string;
+  lastOpened: number;
+  bodySize?: number; // <--- Add this!
 }
 
 // --- TYPES ---
@@ -28,6 +32,8 @@ interface PdfEntry {
   name: string;
   images: PdfPageImage[];
   thumbnail: string;
+  lastOpened: number;
+  bodySize?: number; // <--- This is the new line you needed!
 }
 
 interface Tab {
@@ -133,22 +139,130 @@ function AutoPdfLoader({ images }: { images: PdfPageImage[] }) {
   return null;
 }
 
+// --- DEFAULT STYLE SETTER ---
+function DefaultStyleSetter() {
+  const editor = useEditor();
+
+  useEffect(() => {
+    editor.setStyleForNextShapes(DefaultFontStyle, 'mono'); // OpenDyslexic
+    editor.setStyleForNextShapes(DefaultSizeStyle, 'l');
+  }, [editor]);
+
+  return null;
+}
+
+// --- TEXT WRAP ENFORCER (makes text tool wrap at a fixed width instead of one long line) ---
+function TextWrapEnforcer() {
+  const editor = useEditor();
+
+  useEffect(() => {
+    const unsub = editor.store.listen((entry) => {
+      const widthBySize: Record<string, number> = { s: 235, m: 310, l: 465, xl: 570 };
+      Object.values(entry.changes.added).forEach((record: any) => {
+        if (record.typeName === 'shape' && record.type === 'text' && record.props?.autoSize === true) {
+          const w = widthBySize[record.props.size] ?? 570;
+          editor.updateShape({
+            id: record.id,
+            type: 'text',
+            props: { autoSize: false, w },
+          });
+        }
+      });
+    }, { source: 'user' });
+    return unsub;
+  }, [editor]);
+
+  return null;
+}
+
+
+
+
 // --- PDF WORKSPACE (Tldraw canvas for one PDF tab) ---
 function PdfWorkspace({ pdf }: { pdf: PdfEntry }) {
   return (
     <div className="pdf-workspace">
       <Tldraw persistenceKey={`pdf-${pdf.id}`} components={components}>
         <AutoPdfLoader images={pdf.images} />
+        <TextWrapEnforcer />
+        <DefaultStyleSetter />
+        <KinopioClickTool pdf={pdf} />
       </Tldraw>
     </div>
   );
 }
 
+// --- THE KINOPIO SUPER TOOL (v5: Final Vibe) ---
+function KinopioClickTool({ pdf }: { pdf: PdfEntry }) {
+  const editor = useEditor();
+
+  useEffect(() => {
+    const handleEvent = (event: any) => {
+      // 1. Only trigger on mouse/finger lift
+      if (event.name !== 'pointer_up') return;
+      
+      // 2. Only work in 'select' mode (Requirement: Single Click, no Shift)
+      if (editor.getCurrentToolId() !== 'select') return;
+
+      const { x, y } = editor.inputs.currentPagePoint;
+
+      // 3. Don't drop a note if clicking an existing annotation
+      const shapeAtPoint = editor.getShapeAtPoint({ x, y });
+      if (shapeAtPoint && shapeAtPoint.type !== 'image') return;
+
+      const pageIndex = Math.floor((y - 50) / 1600);
+      const page = pdf.images[pageIndex];
+      if (!page) return;
+
+      // Calculate perfect scale relative to document body text
+      const tldrawBaseM = 18; 
+      const scaleFactor = 1600 / (page.width / 3);
+      const documentBodyInPixels = (pdf.bodySize || 12) * scaleFactor;
+      const idealScale = documentBodyInPixels / tldrawBaseM;
+
+      const id = createShapeId();
+      
+      // 4. Create the base note
+      editor.createShape({
+        id,
+        type: 'text',
+        x,
+        y,
+        props: {
+          text: '', 
+          font: 'mono',
+          size: 'm',
+          w: 300,
+        },
+      });
+
+      // 5. THE FIX: We use 'as any' here to stop the TypeScript error
+      editor.updateShapes([{
+        id,
+        type: 'text',
+        scale: idealScale, 
+      } as any]);
+
+      // 6. Enter editing mode immediately
+      editor.select(id);
+      editor.setEditingShape(id);
+    };
+
+    // Attach listener and return cleanup function
+    editor.on('event', handleEvent);
+    return () => {
+      editor.off('event', handleEvent);
+    };
+  }, [editor, pdf]);
+
+  return null;
+}
 // --- HOME GRID ---
-function HomeGrid({ pdfs, onAddPdf, onOpenPdf }: {
+function HomeGrid({ pdfs, onAddPdf, onOpenPdf, onDeletePdf }: {
   pdfs: PdfEntry[];
   onAddPdf: (pdf: PdfEntry) => void;
   onOpenPdf: (pdfId: string) => void;
+  onDeletePdf: (pdfId: string) => void;
 }) {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -158,15 +272,17 @@ function HomeGrid({ pdfs, onAddPdf, onOpenPdf }: {
 
     setIsLoading(true);
     try {
-      const [images, thumbnail] = await Promise.all([
-        convertPdfToImages(file),
-        createSmallThumbnail(file),
-      ]);
+      // 1. Get both the images AND the detected bodySize from the loader
+      const { images, bodySize } = await convertPdfToImages(file);
+      const thumbnail = await createSmallThumbnail(file);
+
       const newPdf: PdfEntry = {
         id: Date.now().toString(),
         name: file.name.replace(".pdf", ""),
         images,
         thumbnail,
+        lastOpened: Date.now(),
+        bodySize, // 2. Save the winning font size here
       };
       onAddPdf(newPdf);
     } catch (err) {
@@ -194,13 +310,18 @@ function HomeGrid({ pdfs, onAddPdf, onOpenPdf }: {
           )}
         </label>
 
-        {/* PDF cards */}
-        {pdfs.map(pdf => (
+        {/* PDF cards — sorted by most recently opened */}
+        {[...pdfs].sort((a, b) => b.lastOpened - a.lastOpened).map(pdf => (
           <div key={pdf.id} className="pdf-card" onClick={() => onOpenPdf(pdf.id)}>
             <div className="pdf-card-thumbnail">
               <img src={pdf.thumbnail} alt={pdf.name} />
             </div>
             <div className="pdf-card-name">{pdf.name}</div>
+            <button
+              className="pdf-card-delete"
+              onClick={e => { e.stopPropagation(); onDeletePdf(pdf.id); }}
+              title="Remove PDF"
+            >×</button>
           </div>
         ))}
 
@@ -225,11 +346,16 @@ export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('home');
 
+  const saveToStorage = (pdfs: PdfEntry[]) => {
+    // Add bodySize to the list of things it grabs and saves!
+    const toStore: StoredPdfMeta[] = pdfs.map(({ id, name, thumbnail, lastOpened, bodySize }) => ({ id, name, thumbnail, lastOpened, bodySize }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+  };
+
   const handleAddPdf = (pdf: PdfEntry) => {
     setPdfs(prev => {
       const updated = [...prev, pdf];
-      const toStore: StoredPdfMeta[] = updated.map(({ id, name, thumbnail }) => ({ id, name, thumbnail }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+      saveToStorage(updated);
       return updated;
     });
     const newTab: Tab = { id: `tab-${pdf.id}`, pdfId: pdf.id, name: pdf.name };
@@ -238,6 +364,12 @@ export default function App() {
   };
 
   const handleOpenPdf = (pdfId: string) => {
+    // Update lastOpened timestamp
+    setPdfs(prev => {
+      const updated = prev.map(p => p.id === pdfId ? { ...p, lastOpened: Date.now() } : p);
+      saveToStorage(updated);
+      return updated;
+    });
     const existing = tabs.find(t => t.pdfId === pdfId);
     if (existing) {
       setActiveTabId(existing.id);
@@ -250,14 +382,26 @@ export default function App() {
     setActiveTabId(newTab.id);
   };
 
+  const handleDeletePdf = (pdfId: string) => {
+    setPdfs(prev => {
+      const updated = prev.filter(p => p.id !== pdfId);
+      saveToStorage(updated);
+      // Clean up Tldraw's saved canvas for this PDF
+      Object.keys(localStorage).forEach(key => {
+        if (key.includes(`pdf-${pdfId}`)) localStorage.removeItem(key);
+      });
+      return updated;
+    });
+    // Close the tab if it's open
+    setTabs(prev => prev.filter(t => t.pdfId !== pdfId));
+    setActiveTabId(prev => prev === `tab-${pdfId}` ? 'home' : prev);
+  };
+
   const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setTabs(prev => prev.filter(t => t.id !== tabId));
     if (activeTabId === tabId) setActiveTabId('home');
   };
-
-  const activeTab = tabs.find(t => t.id === activeTabId);
-  const activePdf = activeTab ? pdfs.find(p => p.id === activeTab.pdfId) : null;
 
   return (
     <div className="app-layout">
@@ -284,11 +428,21 @@ export default function App() {
 
       {/* TAB CONTENT */}
       <div className="tab-content">
-        {activeTabId === 'home' ? (
-          <HomeGrid pdfs={pdfs} onAddPdf={handleAddPdf} onOpenPdf={handleOpenPdf} />
-        ) : activePdf ? (
-          <PdfWorkspace pdf={activePdf} />
-        ) : null}
+        {/* Home is shown/hidden via display so PDF workspaces can stay mounted */}
+        <div style={{ display: activeTabId === 'home' ? 'contents' : 'none' }}>
+          <HomeGrid pdfs={pdfs} onAddPdf={handleAddPdf} onOpenPdf={handleOpenPdf} onDeletePdf={handleDeletePdf} />
+        </div>
+
+        {/* Each PDF workspace stays mounted once opened — prevents Tldraw store cross-contamination */}
+        {tabs.map(tab => {
+          const pdf = pdfs.find(p => p.id === tab.pdfId);
+          if (!pdf) return null;
+          return (
+            <div key={tab.id} style={{ display: activeTabId === tab.id ? 'contents' : 'none' }}>
+              <PdfWorkspace pdf={pdf} />
+            </div>
+          );
+        })}
       </div>
 
     </div>

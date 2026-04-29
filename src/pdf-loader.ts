@@ -2,10 +2,17 @@ import * as pdfjsLib from "pdfjs-dist";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 
+export interface TextMetadata {
+  x: number;
+  y: number;
+  size: number;
+}
+
 export interface PdfPageImage {
   src: string;
   width: number;
   height: number;
+  textData: TextMetadata[]; // This stores the font sizes and positions
 }
 
 export async function createSmallThumbnail(file: File): Promise<string> {
@@ -31,24 +38,28 @@ export async function convertPdfToImages(file: File): Promise<PdfPageImage[]> {
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    
-    // THE FIX: We bumped the scale from 1.5 to 3.0! 
-    // (You can even push this to 4.0 if you want it insanely sharp, 
-    // though it might take a few seconds longer to load)
     const viewport = page.getViewport({ scale: 3.0 });
-    
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     canvas.height = viewport.height;
     canvas.width = viewport.width;
 
+    // --- NEW: Extract Text Metadata ---
+    const textContent = await page.getTextContent();
+    const textData: TextMetadata[] = textContent.items.map((item: any) => ({
+        // transform[4] is X, transform[5] is Y, transform[0] is font size
+        x: item.transform[4],
+        y: item.transform[5],
+        size: item.transform[0],
+    }));
+
     if (context) {
       await page.render({ canvasContext: context, viewport }).promise;
-      
       images.push({
-        src: canvas.toDataURL(), // Converts the high-res canvas into the image
+        src: canvas.toDataURL(),
         width: viewport.width,
-        height: viewport.height
+        height: viewport.height,
+        textData, // Save the text info here
       });
     }
   }

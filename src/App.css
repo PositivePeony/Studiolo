@@ -124,6 +124,7 @@ body { margin: 0; padding: 0; overflow: hidden; }
   transition: transform 0.15s, box-shadow 0.15s;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .pdf-card:hover {
@@ -144,6 +145,35 @@ body { margin: 0; padding: 0; overflow: hidden; }
   object-fit: cover;
   object-position: top;
   display: block;
+}
+
+.pdf-card-delete {
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  font-size: 14px;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0 0 2px 0;
+}
+
+.pdf-card:hover .pdf-card-delete {
+  opacity: 1;
+}
+
+.pdf-card-delete:hover {
+  background: #c0392b;
 }
 
 .pdf-card-name {
