@@ -198,7 +198,7 @@ function AnnotationSettingsButton() {
   const [mode, setMode] = useState<AnnoMode>('text');
 
   const [textPreset, setTextPreset] = useState<TextPreset>(() => {
-    const p = loadPreset('studiolo-preset-text', { color: 'black', size: pdfSize, font: 'sans' });
+    const p = loadPreset<TextPreset>('studiolo-preset-text', { color: 'black', size: pdfSize, font: 'sans' });
     if (p.font === 'mono') { p.font = 'sans' as const; savePreset('studiolo-preset-text', p); }
     return p;
   });
