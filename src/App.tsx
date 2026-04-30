@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Tldraw,
   createShapeId,
@@ -11,19 +11,23 @@ import {
   TldrawUiMenuItem,
   DefaultFontStyle,
   DefaultSizeStyle,
+  DefaultColorStyle,
 } from "tldraw";
 import "tldraw/tldraw.css";
 import "./App.css";
-import { convertPdfToImages, createSmallThumbnail, type PdfPageImage } from "./pdf-loader";
+import { convertPdfToImages, createSmallThumbnail, saveImagesToIDB, loadImagesFromIDB, deleteImagesFromIDB, type PdfPageImage } from "./pdf-loader";
 
 const STORAGE_KEY = "studiolo-pdfs";
+
+type TldrawSize = 's' | 'm' | 'l' | 'xl';
+const PdfSizeContext = React.createContext<TldrawSize>('m');
 
 interface StoredPdfMeta {
   id: string;
   name: string;
   thumbnail: string;
   lastOpened: number;
-  bodySize?: number; // <--- Add this!
+  bodySize?: number;
 }
 
 // --- TYPES ---
@@ -33,7 +37,7 @@ interface PdfEntry {
   images: PdfPageImage[];
   thumbnail: string;
   lastOpened: number;
-  bodySize?: number; // <--- This is the new line you needed!
+  bodySize?: number;
 }
 
 interface Tab {
@@ -42,7 +46,7 @@ interface Tab {
   name: string;
 }
 
-// --- CUSTOM TOOLBAR (unchanged) ---
+// --- CUSTOM TOOLBAR ---
 const CustomToolbar = (props: any) => {
   const tools = useTools();
   const editor = useEditor();
@@ -83,18 +87,29 @@ const CustomToolbar = (props: any) => {
 
 const components: TLComponents = {
   Toolbar: CustomToolbar,
+  StylePanel: null,
+  InFrontOfTheCanvas: AnnotationSettingsButton,
 };
 
-// --- AUTO PDF LOADER (loads PDF pages into Tldraw on first open) ---
+// --- AUTO PDF LOADER ---
+// FIX: Removed shapeCount from the bail-out condition.
+// Previously, stale tldraw persistence data would set shapeCount > 0
+// and block fresh images from loading. Now we only check:
+//   - loaded.current (so we don't double-load)
+//   - images.length === 0 (nothing to load, e.g. restored from localStorage)
 function AutoPdfLoader({ images }: { images: PdfPageImage[] }) {
   const editor = useEditor();
   const loaded = useRef(false);
-  const shapeCount = useValue('shapeCount', () => editor.getCurrentPageShapeIds().size, [editor]);
 
   useEffect(() => {
-    // Skip if canvas already has content (restored from Tldraw persistence) or no images to load
-    if (loaded.current || shapeCount > 0 || images.length === 0) return;
+    if (loaded.current || images.length === 0) return;
     loaded.current = true;
+
+    // Clear any stale shapes from tldraw persistence before loading fresh pages
+    const existingShapeIds = editor.getCurrentPageShapeIds();
+    if (existingShapeIds.size > 0) {
+      editor.deleteShapes([...existingShapeIds]);
+    }
 
     let currentY = 50;
     images.forEach((img, index) => {
@@ -134,24 +149,184 @@ function AutoPdfLoader({ images }: { images: PdfPageImage[] }) {
 
       currentY += targetHeight;
     });
-  }, [editor, images, shapeCount]);
+  }, [editor, images]);
 
   return null;
 }
 
-// --- DEFAULT STYLE SETTER ---
-function DefaultStyleSetter() {
+// --- HELPERS ---
+function bodyToTldrawSize(bodySize?: number): TldrawSize {
+  if (!bodySize || bodySize <= 8) return 'm';
+  if (bodySize <= 12) return 'l';
+  if (bodySize <= 16) return 'xl';
+  return 'xl';
+}
+
+// --- ANNOTATION SETTINGS BUTTON ---
+const ANNO_COLORS = [
+  { id: 'black',        hex: '#1d1d1d' },
+  { id: 'red',          hex: '#e03131' },
+  { id: 'light-red',    hex: '#ff8787' },
+  { id: 'orange',       hex: '#f76707' },
+  { id: 'yellow',       hex: '#f59f00' },
+  { id: 'green',        hex: '#2f9e44' },
+  { id: 'light-green',  hex: '#74c69d' },
+  { id: 'blue',         hex: '#1971c2' },
+  { id: 'light-blue',   hex: '#74c0fc' },
+  { id: 'violet',       hex: '#7048e8' },
+  { id: 'light-violet', hex: '#c084fc' },
+  { id: 'grey',         hex: '#868e96' },
+] as const;
+
+interface TextPreset      { color: string; size: TldrawSize; font: 'draw'|'sans'|'serif'|'mono' }
+interface HighlightPreset { color: string; size: TldrawSize }
+interface PenPreset       { color: string }
+
+function loadPreset<T>(key: string, def: T): T {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; }
+}
+function savePreset<T>(key: string, val: T) {
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+type AnnoMode = 'text' | 'highlight' | 'pen';
+
+function AnnotationSettingsButton() {
   const editor = useEditor();
+  const pdfSize = React.useContext(PdfSizeContext);
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<AnnoMode>('text');
+
+  const [textPreset, setTextPreset] = useState<TextPreset>(() => {
+    const p = loadPreset('studiolo-preset-text', { color: 'black', size: pdfSize, font: 'sans' });
+    if (p.font === 'mono') { p.font = 'sans' as const; savePreset('studiolo-preset-text', p); }
+    return p;
+  });
+  const [hlPreset, setHlPreset] = useState<HighlightPreset>(
+    () => loadPreset('studiolo-preset-highlight', { color: 'yellow', size: pdfSize })
+  );
+  const [penPreset, setPenPreset] = useState<PenPreset>(
+    () => loadPreset('studiolo-preset-pen', { color: 'black' })
+  );
+
+  const toolId = useValue('toolId', () => editor.getCurrentToolId(), [editor]);
 
   useEffect(() => {
-    editor.setStyleForNextShapes(DefaultFontStyle, 'mono'); // OpenDyslexic
-    editor.setStyleForNextShapes(DefaultSizeStyle, 'l');
-  }, [editor]);
+    if (toolId === 'text') setMode('text');
+    else if (toolId === 'highlight') setMode('highlight');
+    else if (toolId === 'draw') setMode('pen');
+  }, [toolId]);
 
-  return null;
+  useEffect(() => {
+    if (toolId === 'text' || toolId === 'select') {
+      editor.setStyleForNextShapes(DefaultColorStyle, textPreset.color as any);
+      editor.setStyleForNextShapes(DefaultSizeStyle, textPreset.size);
+      editor.setStyleForNextShapes(DefaultFontStyle, textPreset.font);
+    } else if (toolId === 'highlight') {
+      editor.setStyleForNextShapes(DefaultColorStyle, hlPreset.color as any);
+      editor.setStyleForNextShapes(DefaultSizeStyle, hlPreset.size);
+    } else if (toolId === 'draw' || toolId === 'arrow') {
+      editor.setStyleForNextShapes(DefaultColorStyle, penPreset.color as any);
+    }
+  }, [editor, toolId, textPreset, hlPreset, penPreset]);
+
+  const updateText = (patch: Partial<TextPreset>) => {
+    const u = { ...textPreset, ...patch };
+    setTextPreset(u); savePreset('studiolo-preset-text', u);
+    editor.setStyleForNextShapes(DefaultColorStyle, u.color as any);
+    editor.setStyleForNextShapes(DefaultSizeStyle, u.size);
+    editor.setStyleForNextShapes(DefaultFontStyle, u.font);
+  };
+  const updateHl = (patch: Partial<HighlightPreset>) => {
+    const u = { ...hlPreset, ...patch };
+    setHlPreset(u); savePreset('studiolo-preset-highlight', u);
+    editor.setStyleForNextShapes(DefaultColorStyle, u.color as any);
+    editor.setStyleForNextShapes(DefaultSizeStyle, u.size);
+  };
+  const updatePen = (patch: Partial<PenPreset>) => {
+    const u = { ...penPreset, ...patch };
+    setPenPreset(u); savePreset('studiolo-preset-pen', u);
+    editor.setStyleForNextShapes(DefaultColorStyle, u.color as any);
+  };
+
+  return (
+    <div className="anno-btn-wrap">
+      <button className="anno-rainbow-btn" onClick={() => setOpen(o => !o)}>
+        Annotation Settings
+      </button>
+      {open && (
+        <div className="anno-panel">
+          <div className="anno-panel-header">
+            <span className="anno-panel-title">Annotation Settings</span>
+            <button className="anno-close-btn" onClick={() => setOpen(false)}>×</button>
+          </div>
+
+          <div className="anno-mode-tabs">
+            {(['text', 'highlight', 'pen'] as AnnoMode[]).map(m => (
+              <button key={m} className={`anno-mode-tab ${mode === m ? 'anno-mode-active' : ''}`}
+                onClick={() => setMode(m)}>
+                {m.charAt(0).toUpperCase() + m.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'text' && (<>
+            <div className="anno-section-label">Color</div>
+            <div className="anno-colors">
+              {ANNO_COLORS.map(c => (
+                <button key={c.id} className={`anno-color-swatch ${textPreset.color === c.id ? 'anno-color-active' : ''}`}
+                  style={{ background: c.hex }} title={c.id} onClick={() => updateText({ color: c.id })} />
+              ))}
+            </div>
+            <div className="anno-section-label">Size</div>
+            <div className="anno-sizes">
+              {(['s', 'm', 'l', 'xl'] as const).map(s => (
+                <button key={s} className={`anno-size-btn ${textPreset.size === s ? 'anno-btn-active' : ''}`}
+                  onClick={() => updateText({ size: s })}>{s.toUpperCase()}</button>
+              ))}
+            </div>
+            <div className="anno-section-label">Font</div>
+            <div className="anno-fonts">
+              {(['draw', 'sans', 'serif', 'mono'] as const).map(f => (
+                <button key={f} className={`anno-font-btn ${textPreset.font === f ? 'anno-btn-active' : ''}`}
+                  onClick={() => updateText({ font: f })}>{f.charAt(0).toUpperCase() + f.slice(1)}</button>
+              ))}
+            </div>
+          </>)}
+
+          {mode === 'highlight' && (<>
+            <div className="anno-section-label">Color</div>
+            <div className="anno-colors">
+              {ANNO_COLORS.map(c => (
+                <button key={c.id} className={`anno-color-swatch ${hlPreset.color === c.id ? 'anno-color-active' : ''}`}
+                  style={{ background: c.hex }} title={c.id} onClick={() => updateHl({ color: c.id })} />
+              ))}
+            </div>
+            <div className="anno-section-label">Size</div>
+            <div className="anno-sizes">
+              {(['s', 'm', 'l', 'xl'] as const).map(s => (
+                <button key={s} className={`anno-size-btn ${hlPreset.size === s ? 'anno-btn-active' : ''}`}
+                  onClick={() => updateHl({ size: s })}>{s.toUpperCase()}</button>
+              ))}
+            </div>
+          </>)}
+
+          {mode === 'pen' && (<>
+            <div className="anno-section-label">Color</div>
+            <div className="anno-colors">
+              {ANNO_COLORS.map(c => (
+                <button key={c.id} className={`anno-color-swatch ${penPreset.color === c.id ? 'anno-color-active' : ''}`}
+                  style={{ background: c.hex }} title={c.id} onClick={() => updatePen({ color: c.id })} />
+              ))}
+            </div>
+          </>)}
+        </div>
+      )}
+    </div>
+  );
 }
 
-// --- TEXT WRAP ENFORCER (makes text tool wrap at a fixed width instead of one long line) ---
+// --- TEXT WRAP ENFORCER ---
 function TextWrapEnforcer() {
   const editor = useEditor();
 
@@ -175,80 +350,44 @@ function TextWrapEnforcer() {
   return null;
 }
 
-
-
-
-// --- PDF WORKSPACE (Tldraw canvas for one PDF tab) ---
-function PdfWorkspace({ pdf }: { pdf: PdfEntry }) {
-  return (
-    <div className="pdf-workspace">
-      <Tldraw persistenceKey={`pdf-${pdf.id}`} components={components}>
-        <AutoPdfLoader images={pdf.images} />
-        <TextWrapEnforcer />
-        <DefaultStyleSetter />
-        <KinopioClickTool pdf={pdf} />
-      </Tldraw>
-    </div>
-  );
-}
-
-// --- THE KINOPIO SUPER TOOL (v5: Final Vibe) ---
+// --- THE KINOPIO CLICK TOOL ---
+// FIX: Guarded against undefined/empty pdf.images at the top of the handler.
 function KinopioClickTool({ pdf }: { pdf: PdfEntry }) {
   const editor = useEditor();
 
   useEffect(() => {
     const handleEvent = (event: any) => {
-      // 1. Only trigger on mouse/finger lift
       if (event.name !== 'pointer_up') return;
-      
-      // 2. Only work in 'select' mode (Requirement: Single Click, no Shift)
       if (editor.getCurrentToolId() !== 'select') return;
 
       const { x, y } = editor.inputs.currentPagePoint;
 
-      // 3. Don't drop a note if clicking an existing annotation
       const shapeAtPoint = editor.getShapeAtPoint({ x, y });
       if (shapeAtPoint && shapeAtPoint.type !== 'image') return;
 
-      const pageIndex = Math.floor((y - 50) / 1600);
-      const page = pdf.images[pageIndex];
-      if (!page) return;
+      // Guard: bail if images aren't available (e.g. restored from localStorage)
+      if (!pdf.images || pdf.images.length === 0) return;
 
-      // Calculate perfect scale relative to document body text
-      const tldrawBaseM = 18; 
-      const scaleFactor = 1600 / (page.width / 3);
-      const documentBodyInPixels = (pdf.bodySize || 12) * scaleFactor;
-      const idealScale = documentBodyInPixels / tldrawBaseM;
+      const pageIndex = Math.floor((y - 50) / 1600);
+      if (pageIndex < 0 || pageIndex >= pdf.images.length) return;
 
       const id = createShapeId();
-      
-      // 4. Create the base note
+
       editor.createShape({
         id,
         type: 'text',
         x,
         y,
         props: {
-          text: '', 
-          font: 'mono',
-          size: 'm',
+          text: '',
           w: 300,
         },
       });
 
-      // 5. THE FIX: We use 'as any' here to stop the TypeScript error
-      editor.updateShapes([{
-        id,
-        type: 'text',
-        scale: idealScale, 
-      } as any]);
-
-      // 6. Enter editing mode immediately
       editor.select(id);
       editor.setEditingShape(id);
     };
 
-    // Attach listener and return cleanup function
     editor.on('event', handleEvent);
     return () => {
       editor.off('event', handleEvent);
@@ -257,6 +396,28 @@ function KinopioClickTool({ pdf }: { pdf: PdfEntry }) {
 
   return null;
 }
+
+// --- PDF WORKSPACE ---
+// FIX: Always passes a safe array to AutoPdfLoader.
+// Only mounts KinopioClickTool when images are actually available.
+function PdfWorkspace({ pdf }: { pdf: PdfEntry }) {
+  const safeImages = pdf.images || [];
+  const hasImages = safeImages.length > 0;
+  const tldrawSize = bodyToTldrawSize(pdf.bodySize);
+
+  return (
+    <div className="pdf-workspace">
+      <PdfSizeContext.Provider value={tldrawSize}>
+        <Tldraw persistenceKey={`pdf-${pdf.id}`} components={components}>
+          <AutoPdfLoader images={safeImages} />
+          <TextWrapEnforcer />
+          {hasImages && <KinopioClickTool pdf={pdf} />}
+        </Tldraw>
+      </PdfSizeContext.Provider>
+    </div>
+  );
+}
+
 // --- HOME GRID ---
 function HomeGrid({ pdfs, onAddPdf, onOpenPdf, onDeletePdf }: {
   pdfs: PdfEntry[];
@@ -272,7 +433,6 @@ function HomeGrid({ pdfs, onAddPdf, onOpenPdf, onDeletePdf }: {
 
     setIsLoading(true);
     try {
-      // 1. Get both the images AND the detected bodySize from the loader
       const { images, bodySize } = await convertPdfToImages(file);
       const thumbnail = await createSmallThumbnail(file);
 
@@ -282,7 +442,7 @@ function HomeGrid({ pdfs, onAddPdf, onOpenPdf, onDeletePdf }: {
         images,
         thumbnail,
         lastOpened: Date.now(),
-        bodySize, // 2. Save the winning font size here
+        bodySize,
       };
       onAddPdf(newPdf);
     } catch (err) {
@@ -297,7 +457,6 @@ function HomeGrid({ pdfs, onAddPdf, onOpenPdf, onDeletePdf }: {
     <div className="home-grid-container">
       <div className="home-grid">
 
-        {/* Add PDF card */}
         <label className="pdf-card add-card">
           <input type="file" accept="application/pdf" onChange={handleFileSelect} />
           {isLoading ? (
@@ -310,7 +469,6 @@ function HomeGrid({ pdfs, onAddPdf, onOpenPdf, onDeletePdf }: {
           )}
         </label>
 
-        {/* PDF cards — sorted by most recently opened */}
         {[...pdfs].sort((a, b) => b.lastOpened - a.lastOpened).map(pdf => (
           <div key={pdf.id} className="pdf-card" onClick={() => onOpenPdf(pdf.id)}>
             <div className="pdf-card-thumbnail">
@@ -337,22 +495,38 @@ export default function App() {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (!stored) return [];
       const metas: StoredPdfMeta[] = JSON.parse(stored);
-      // Restore cards with empty images — Tldraw has the full canvas saved already
-      return metas.map(m => ({ ...m, images: [] }));
+      return metas.map(m => ({ ...m, images: [] as PdfPageImage[] }));
     } catch {
       return [];
     }
   });
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return;
+    let metas: StoredPdfMeta[];
+    try { metas = JSON.parse(stored); } catch { return; }
+    Promise.all(
+      metas.map(m => loadImagesFromIDB(m.id).then(images => ({ id: m.id, images })))
+    ).then(results => {
+      setPdfs(prev => prev.map(p => {
+        const found = results.find(r => r.id === p.id);
+        return found ? { ...p, images: found.images } : p;
+      }));
+    });
+  }, []);
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('home');
 
-  const saveToStorage = (pdfs: PdfEntry[]) => {
-    // Add bodySize to the list of things it grabs and saves!
-    const toStore: StoredPdfMeta[] = pdfs.map(({ id, name, thumbnail, lastOpened, bodySize }) => ({ id, name, thumbnail, lastOpened, bodySize }));
+  const saveToStorage = useCallback((pdfList: PdfEntry[]) => {
+    const toStore: StoredPdfMeta[] = pdfList.map(({ id, name, thumbnail, lastOpened, bodySize }) => ({
+      id, name, thumbnail, lastOpened, bodySize,
+    }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
-  };
+  }, []);
 
-  const handleAddPdf = (pdf: PdfEntry) => {
+  const handleAddPdf = useCallback((pdf: PdfEntry) => {
+    saveImagesToIDB(pdf.id, pdf.images);
     setPdfs(prev => {
       const updated = [...prev, pdf];
       saveToStorage(updated);
@@ -361,28 +535,31 @@ export default function App() {
     const newTab: Tab = { id: `tab-${pdf.id}`, pdfId: pdf.id, name: pdf.name };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
-  };
+  }, [saveToStorage]);
 
-  const handleOpenPdf = (pdfId: string) => {
-    // Update lastOpened timestamp
+  const handleOpenPdf = useCallback((pdfId: string) => {
     setPdfs(prev => {
       const updated = prev.map(p => p.id === pdfId ? { ...p, lastOpened: Date.now() } : p);
       saveToStorage(updated);
       return updated;
     });
-    const existing = tabs.find(t => t.pdfId === pdfId);
-    if (existing) {
-      setActiveTabId(existing.id);
-      return;
-    }
-    const pdf = pdfs.find(p => p.id === pdfId);
-    if (!pdf) return;
-    const newTab: Tab = { id: `tab-${pdfId}`, pdfId, name: pdf.name };
-    setTabs(prev => [...prev, newTab]);
-    setActiveTabId(newTab.id);
-  };
+    setTabs(prev => {
+      const existing = prev.find(t => t.pdfId === pdfId);
+      if (existing) {
+        setActiveTabId(existing.id);
+        return prev;
+      }
+      // Need to read from current pdfs state inside the callback
+      const pdf = pdfs.find(p => p.id === pdfId);
+      if (!pdf) return prev;
+      const newTab: Tab = { id: `tab-${pdfId}`, pdfId, name: pdf.name };
+      setActiveTabId(newTab.id);
+      return [...prev, newTab];
+    });
+  }, [pdfs, saveToStorage]);
 
-  const handleDeletePdf = (pdfId: string) => {
+  const handleDeletePdf = useCallback((pdfId: string) => {
+    deleteImagesFromIDB(pdfId);
     setPdfs(prev => {
       const updated = prev.filter(p => p.id !== pdfId);
       saveToStorage(updated);
@@ -392,10 +569,9 @@ export default function App() {
       });
       return updated;
     });
-    // Close the tab if it's open
     setTabs(prev => prev.filter(t => t.pdfId !== pdfId));
     setActiveTabId(prev => prev === `tab-${pdfId}` ? 'home' : prev);
-  };
+  }, [saveToStorage]);
 
   const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -428,12 +604,10 @@ export default function App() {
 
       {/* TAB CONTENT */}
       <div className="tab-content">
-        {/* Home is shown/hidden via display so PDF workspaces can stay mounted */}
         <div style={{ display: activeTabId === 'home' ? 'contents' : 'none' }}>
           <HomeGrid pdfs={pdfs} onAddPdf={handleAddPdf} onOpenPdf={handleOpenPdf} onDeletePdf={handleDeletePdf} />
         </div>
 
-        {/* Each PDF workspace stays mounted once opened — prevents Tldraw store cross-contamination */}
         {tabs.map(tab => {
           const pdf = pdfs.find(p => p.id === tab.pdfId);
           if (!pdf) return null;
