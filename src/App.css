@@ -3,131 +3,249 @@
 #root { width: 100vw; height: 100vh; }
 body { margin: 0; padding: 0; overflow: hidden; }
 
-.desk-container {
+/* ============================================
+   APP LAYOUT
+   ============================================ */
+.app-layout {
   display: flex;
-  justify-content: center;
-  background-color: #F1E9D2;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
+  background-color: #F1E9D2;
+}
+
+/* ============================================
+   TAB BAR
+   ============================================ */
+.tab-bar {
+  display: flex;
+  align-items: flex-end;
+  background-color: #F1E9D2;
+  border-bottom: 1px solid rgba(186, 146, 106, 0.3);
+  padding: 0 8px;
+  height: 42px;
+  flex-shrink: 0;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  color: #c8b99a;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  background: rgba(255,255,255,0.3);
+  border-color: rgba(186, 146, 106, 0.3);
+}
+
+.tab-active {
+  background: #f7f1e5 !important;
+  border-color: #c8b99a !important;
+  color: #2c2a26 !important;
+  font-weight: 600;
+  margin-bottom: -1px;
+  z-index: 2;
+}
+
+
+.tab-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.5;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.tab-close:hover {
+  opacity: 1;
+  background: rgba(0,0,0,0.15);
+}
+
+/* ============================================
+   TAB CONTENT
+   ============================================ */
+.tab-content {
+  flex: 1;
+  overflow: hidden;
   position: relative;
 }
 
-.document-spine {
-  width: 700px;
+/* ============================================
+   HOME GRID
+   ============================================ */
+.home-grid-container {
+  width: 100%;
   height: 100%;
-  padding: 40px;
+  background-color: #F1E9D2;
   overflow-y: auto;
-  z-index: 1;
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 24px;
+  max-width: 1200px;
+}
+
+/* ============================================
+   PDF CARDS
+   ============================================ */
+.pdf-card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.pdf-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+}
+
+.pdf-card-thumbnail {
+  width: 100%;
+  aspect-ratio: 3/4;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.pdf-card-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  display: block;
+}
+
+.pdf-card-delete {
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  font-size: 14px;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0 0 2px 0;
+}
+
+.pdf-card:hover .pdf-card-delete {
+  opacity: 1;
+}
+
+.pdf-card-delete:hover {
+  background: #c0392b;
+}
+
+.pdf-card-name {
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2c2a26;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-top: 1px solid #f0ece0;
+}
+
+/* Add PDF card */
+.add-card {
+  aspect-ratio: 3/4;
+  border: 2px dashed #c8b99a;
+  background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.pdf-page-card {
-  background: white;
-  padding: 15px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+.add-card:hover {
+  border-color: #8b7355;
+  background: rgba(139,115,85,0.05);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+}
+
+.add-card input {
+  display: none;
+}
+
+.add-card-plus {
+  font-size: 40px;
+  color: #c8b99a;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.add-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b7355;
+}
+
+/* ============================================
+   PDF WORKSPACE (Tldraw)
+   ============================================ */
+.pdf-workspace {
   width: 100%;
+  height: 100%;
+  position: relative;
 }
 
-.pdf-page-card img { width: 100%; height: auto; display: block; }
-
-/* TLDRAW TRANSPARENCY FIXES */
-.drawing-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-}
+/* TLDRAW OVERRIDES */
 .tl-canvas, .tl-background { background-color: transparent !important; }
-.tl-container { pointer-events: all; }
 
-/* THE MASTER UI LAYER FIX */
-.master-ui-layer {
-  position: absolute;
-  top: 40px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 99999; /* Forces it above Tldraw's UI */
-  pointer-events: auto; /* Guarantees it can be clicked */
-}
-
-.custom-file-upload {
-  display: inline-block;
-  padding: 40px 80px; 
-  font-size: 32px; 
-  font-weight: bold;
-  background-color: #0064ff;
-  color: white;
-  border-radius: 15px;
-  cursor: pointer;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-  text-align: center;
-}
-
-.custom-file-upload:hover {
-  background-color: #004ecc;
-}
-
-.custom-file-upload input {
-  display: none; 
-}
-
-/* THE CORNER "ADD ANOTHER PDF" BUTTON */
-.secondary-ui-layer {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 99999;
-  pointer-events: auto;
-}
-
-.small-file-upload {
-  display: inline-block;
-  padding: 12px 24px; 
-  font-size: 16px; 
-  font-weight: bold;
-  background-color: #28a745; /* Green to separate it from the start button */
-  color: white;
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-  text-align: center;
-}
-
-.small-file-upload:hover {
-  background-color: #218838;
-}
-
-.small-file-upload input {
-  display: none; 
-}
-
-
-/* CLEAR PAGE BUTTON */
-.clear-btn-container {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 99999;
-  pointer-events: auto;
-}
-
-.clear-page-btn {
-  padding: 12px 20px;
-  background: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-}
-
-.clear-page-btn:hover {
-  background: #c82333;
+/* Hide unwanted top-bar buttons, keep only undo + redo */
+[data-testid="main-menu.button"],
+[data-testid="quick-actions.delete"],
+[data-testid="quick-actions.duplicate"],
+[data-testid="actions-menu.button"],
+.tlui-page-menu__trigger,
+.tlui-debug-panel,
+[data-testid="minimap.toggle-button"] {
+  display: none !important;
 }
 
 /* THE MORE BUTTON */
@@ -149,11 +267,11 @@ body { margin: 0; padding: 0; overflow: hidden; }
   background: rgba(0,0,0,0.05);
 }
 
-/* THE EXTRAS POP-UP (Floating perfectly above) */
+/* THE EXTRAS POP-UP */
 .extras-popup {
   position: absolute;
-  bottom: calc(100% + 15px); /* Forces it exactly 15 pixels above the toolbar */
-  right: 0px;                /* Snaps it to the right edge */
+  bottom: calc(100% + 15px);
+  right: 0px;
   background-color: #ffffff;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.15);
@@ -166,7 +284,191 @@ body { margin: 0; padding: 0; overflow: hidden; }
   border: 1px solid rgba(0,0,0,0.05);
 }
 
-/* HIJACK THE 4TH FONT OPTION FOR DYSLEXIA FONT */
+/* ============================================
+   ANNOTATION SETTINGS BUTTON
+   ============================================ */
+.anno-btn-wrap {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  pointer-events: all;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.anno-rainbow-btn {
+  background: linear-gradient(to right, #ff0000, #ff8800, #ffdd00, #00cc44, #0066ff, #8800ff);
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  border: none;
+  padding: 7px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  white-space: nowrap;
+}
+
+.anno-rainbow-btn:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+}
+
+.anno-panel {
+  margin-top: 8px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px;
+  width: 240px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  color: #1d1d1d;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+.anno-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.anno-panel-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1d1d1d;
+}
+
+.anno-close-btn {
+  background: rgba(0,0,0,0.08);
+  border: none;
+  color: #1d1d1d;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.anno-close-btn:hover { background: rgba(0,0,0,0.15); }
+
+.anno-mode-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.anno-mode-tab {
+  flex: 1;
+  padding: 5px 0;
+  border: 1px solid #ddd;
+  background: #f5f5f5;
+  color: #555;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.anno-mode-tab:hover { background: #eee; }
+
+.anno-mode-active {
+  background: #fff !important;
+  border-color: #22c55e !important;
+  color: #16a34a !important;
+}
+
+.anno-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin: 10px 0 6px;
+}
+
+.anno-colors {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+
+.anno-color-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.1);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s, border-color 0.1s;
+}
+
+.anno-color-swatch:hover {
+  transform: scale(1.2);
+  border-color: rgba(0,0,0,0.3);
+}
+
+.anno-color-active {
+  border: 2px solid #22c55e !important;
+  transform: scale(1.2);
+}
+
+.anno-sizes {
+  display: flex;
+  gap: 6px;
+}
+
+.anno-size-btn {
+  flex: 1;
+  background: #f5f5f5;
+  border: 2px solid transparent;
+  color: #1d1d1d;
+  border-radius: 6px;
+  padding: 5px 0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.anno-size-btn:hover { background: #e8e8e8; }
+
+.anno-fonts {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.anno-font-btn {
+  flex: 1;
+  background: #f5f5f5;
+  border: 2px solid transparent;
+  color: #1d1d1d;
+  border-radius: 6px;
+  padding: 5px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.anno-font-btn:hover { background: #e8e8e8; }
+
+.anno-btn-active {
+  border-color: #22c55e !important;
+  color: #16a34a !important;
+  background: rgba(34,197,94,0.1) !important;
+}
+
+/* DYSLEXIA FONT */
 .tl-container {
   --tl-font-mono: 'OpenDyslexic', 'Comic Sans MS', sans-serif !important;
 }
